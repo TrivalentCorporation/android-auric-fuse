@@ -23,6 +23,8 @@ import java.util.Date;
 import android.security.KeyPairGeneratorSpec;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.math.BigInteger;
 import android.util.Log;
 import javax.security.auth.x500.X500Principal;
