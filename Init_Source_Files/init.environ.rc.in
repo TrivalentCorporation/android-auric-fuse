@@ -12,5 +12,5 @@ on init
     
     #Auric Modification
     #export SYSTEMSERVERCLASSPATH %SYSTEMSERVERCLASSPATH%
-    export SYSTEMSERVERCLASSPATH %SYSTEMSERVERCLASSPATH%:/system/framework/AuricAuthenticationLib.jar:/system/framework/bcprov-jdk15on-151.jar
+    export SYSTEMSERVERCLASSPATH %SYSTEMSERVERCLASSPATH%:/system/framework/bcprov-jdk15on-151.jar
     # End Auric Modification
