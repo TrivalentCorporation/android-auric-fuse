@@ -45,63 +45,64 @@ public final class AuricManager {
     }
 
     public byte[] getPublicKey() {
-	try {
-		return mService.getPublicKey();
-	}
-	catch (Exception e) {
-		e.printStackTrace();
-		System.out.println(e.getMessage());
-		System.out.println(e.toString());
-		return null;
-	}
+		try {
+			return mService.getPublicKey();
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			System.out.println(e.getMessage());
+			System.out.println(e.toString());
+			return null;
+		}
     }
 	
-    public boolean initializeCrypto(int m, int n, byte[] wrappedKey, boolean loggingEnabled) {
-	try {
-		return mService.initializeCrypto(m, n, wrappedKey, loggingEnabled);
-	}
-	catch (Exception e) {
-		e.printStackTrace();
-		System.out.println(e.getMessage());
-		System.out.println(e.toString());
-		return false;
-	}
+    public byte[] initializeCrypto(int m, int n, byte[] wrappedKey, boolean loggingEnabled) {
+        try {
+            return mService.initializeCrypto(m, n, wrappedKey, loggingEnabled);
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            System.out.println(e.getMessage());
+            System.out.println(e.toString());
+            return null;
+        }
     }
 
-    public boolean deauthenticate() {
-	try {
-		return mService.deauthenticate();
-	}
-	catch (Exception e) {
-		e.printStackTrace();
-		System.out.println(e.getMessage());
-		System.out.println(e.toString());
-		return false;
-	}
+    public byte[] deauthenticate() {
+        try {
+            return mService.deauthenticate();
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            System.out.println(e.getMessage());
+            System.out.println(e.toString());
+            return null;
+        }
     }
 
-    public boolean reauthenticate(byte[] wrappedKey) {
-	try {
-		return mService.reauthenticate(wrappedKey);
-	}
-	catch (Exception e) {
-		e.printStackTrace();
-		System.out.println(e.getMessage());
-		System.out.println(e.toString());
-		return false;
-	}
+    public byte[] reauthenticate(byte[] wrappedKey) {
+        try {
+            return mService.reauthenticate(wrappedKey);
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            System.out.println(e.getMessage());
+            System.out.println(e.toString());
+            return null;
+        }
     }
 
-    public boolean sendEncryptedDirectory(String encryptedDir) {
-	try {
-		return mService.sendEncryptedDirectory(encryptedDir);
-	}
-	catch (Exception e) {
-		e.printStackTrace();
-		System.out.println(e.getMessage());
-		System.out.println(e.toString());
-		return false;
-	}
+
+    public boolean sendEncryptedDirectory(String encryptedDir, boolean persistDirConfig) {
+		try {
+			return mService.sendEncryptedDirectory(encryptedDir, persistDirConfig);
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			System.out.println(e.getMessage());
+			System.out.println(e.toString());
+			return false;
+		}
     }
     
 

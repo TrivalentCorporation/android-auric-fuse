@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 package android.os;
 
 /** {@hide} */
@@ -22,13 +21,12 @@ interface IAuricService {
 
     // Get public key from Service so that we can send it back a wrapped key
     byte[] getPublicKey();
+    
+    // Initialize the system for the first time and these are returning service info
+    byte[] initializeCrypto(int m, int n, in byte[] wrappedKey, boolean loggingEnabled);
+    byte[] deauthenticate();
+    byte[] reauthenticate(in byte[] wrappedKey);
 
-    // Initialize the system for the first time
-    boolean initializeCrypto(int m, int n, in byte[] wrappedKey, boolean loggingEnabled);
-
-    boolean deauthenticate();
-    boolean reauthenticate(in byte[] wrappedKey);
-
-    boolean sendEncryptedDirectory(String encryptedDir);
+    boolean sendEncryptedDirectory(String encryptedDir, boolean persistDirConfig);
 
 }

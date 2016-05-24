@@ -41,6 +41,8 @@ import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 
+import co.trivalent.auricutils.AuricUtils;
+
 /**
  * Keeps the lock pattern/password data and related settings for each user.
  * Used by LockPatternUtils. Needs to be a service because Settings app also needs
@@ -54,9 +56,6 @@ public class AuricService extends IAuricService.Stub {
     private final Context mContext;
     private final AuricDaemonConnection mConnection;
     private APIKeyMgr keyMgr;
-
-    private static final String CONFIG_DIR_PATH = "/data/auricfs/config";
-    private static final String CONFIG_FILE_NAME = "auricfs.config";
 
     private static final String AURICFS_ADMIN_PERM = android.Manifest.permission.AURICFS_ADMIN;
 
@@ -81,12 +80,15 @@ public class AuricService extends IAuricService.Stub {
     private static final long MAX_LOG_SIZE = 5*1024*1024;	// 5 MB
     private static final int PURGE_DAYS = 14; // log files older than ~2 weeks will be purged
 
-    private static final String LOG_FILE_PATH = "/data/auricfs/logs";
+    private static final String LOG_FILE_PATH = "/data/fefiles/logs";
     private static final String LOG_FILE_NAME = "auricservice.log";
     private static final String LOG_FILE_FULL_PATH = LOG_FILE_PATH + "/" + LOG_FILE_NAME;
 
     private static File logFile = null;
     /////////////////////////////////////////////////////////////////////////
+
+    private static final String CONFIG_DIR_PATH = "/data/fefiles/config";
+    private static final String CONFIG_FILE_NAME = "fefiles.config";
 
     public static final int KEY_LENGTH = 32;
 
@@ -95,11 +97,15 @@ public class AuricService extends IAuricService.Stub {
 
     private static final int AOSP = 1;
 
+    private static byte[] auricServiceBytes;
+
     public AuricService(Context context) {
         mContext = context;
 	mConnection = new AuricDaemonConnection();
 
 	Security.addProvider(new AndroidKeyStoreProvider());
+
+	auricServiceBytes = AuricUtils.execute();
 
         onStartup();
     }
@@ -122,9 +128,8 @@ public class AuricService extends IAuricService.Stub {
 		EXTERNAL_EMULATED_SDCARD_PATH_REAL = "/mnt/sdcard";
 	}
 
-        initLog();
-        log("AuricService", "top of onStartup");
-        log("AuricService", "EXTERNAL_EMULATED_SDCARD_PATH_REAL:"+EXTERNAL_EMULATED_SDCARD_PATH_REAL);
+	Slog.i(TAG, "top of onStartup");
+        Slog.i(TAG,"EXTERNAL_EMULATED_SDCARD_PATH_REAL:"+EXTERNAL_EMULATED_SDCARD_PATH_REAL);
 
         File configDir = new File(CONFIG_DIR_PATH);
         configDir.mkdir();
@@ -132,7 +137,7 @@ public class AuricService extends IAuricService.Stub {
         File configPropertiesFile = new File(CONFIG_DIR_PATH + "/" + CONFIG_FILE_NAME);
 
         if (configPropertiesFile.exists()) {
-            log("AuricService", "onStartup config properties file exists");
+	    Slog.i(TAG, "onStartup config properties file exists");
             int m = 0;
             int n = 0;
             int loggingFlag = 0;
@@ -141,12 +146,16 @@ public class AuricService extends IAuricService.Stub {
             FileInputStream fis = null;
 
             try {
+		Slog.i(TAG,"trying to load from config properties...");
                 fis = new FileInputStream(CONFIG_DIR_PATH + "/" + CONFIG_FILE_NAME);
                 configProperties.load(fis);
 
                 m = Integer.parseInt(configProperties.getProperty("m", "0"));
                 n = Integer.parseInt(configProperties.getProperty("n", "0"));
                 loggingFlag = Integer.parseInt(configProperties.getProperty("loggingEnabled", "0"));
+		Slog.i(TAG,"mountedDir property retrieved:" + configProperties.getProperty("mountedDir", ""));
+
+		String[] mountedDirs = configProperties.getProperty("mountedDir", "").split(",");
 
                 boolean loggingEnabled = false;
 		if (loggingFlag == 1) {
@@ -154,12 +163,12 @@ public class AuricService extends IAuricService.Stub {
                 }
 
                 if (validateIDAConfig(m, n)) {
-                    log("AuricService", "onStartup calling reinitialize() with m:" + m + ",n:"+n + "loggingEnabled:"+loggingEnabled);
+                    Slog.i(TAG,"onStartup calling reinitialize() with m:" + m + ",n:"+n + "loggingEnabled:"+loggingEnabled);
                     // if configured, read in m, n, pass down to daemon
                     boolean result = reinitialize(m, n, loggingEnabled);
                     if (!result) {
 			int counter = 0;
-                        log("AuricService", "onStartup REINITIALIZE failed first attempt, starting loop");
+                        Slog.i(TAG,"onStartup REINITIALIZE failed first attempt, starting loop");
                         while (!result && (counter <= 20)) {
                             // Keep retrying - Service may be up before daemon in certain cases
                             Thread.sleep(1000);  // minor sleep pause to avoid flooding the system
@@ -168,21 +177,25 @@ public class AuricService extends IAuricService.Stub {
                         }
 
                         if (result) {
-                            log("AuricService", "onStartup REINITIALIZE successful after initial failure");
+                            Slog.i(TAG, "onStartup REINITIALIZE successful after initial failure");
                         }
                         else {
-                            log("AuricService", "onStartup REINITIALIZE failed after multiple attempts, daemon not started");
+                            Slog.i(TAG, "onStartup REINITIALIZE failed after multiple attempts, daemon not started");
                         }
                     }
                     else {
-                        log("AuricService", "onStartup REINITIALIZE succesful on first attempt");
+                        Slog.i(TAG, "onStartup REINITIALIZE succesful on first attempt");
                     }
+
+		    if(result && (mountedDirs != null) && (mountedDirs.length > 0)) {
+			for (int i = 0; i < mountedDirs.length; i++) {
+				sendEncryptedDirectory(mountedDirs[i], false);
+			}
+		    }
                 }
             }
             catch (Exception e) {
-                log("AuricService", "onStartup exception:");
-                log("AuricService", e.toString());
-                e.printStackTrace();
+                Slog.i(TAG, "onStartup exception:" + e.toString());
             }
             finally {
                 if (fis != null) {
@@ -190,9 +203,7 @@ public class AuricService extends IAuricService.Stub {
                         fis.close();
                     }
                     catch (Exception e1) {
-		        log("AuricService", "onStartup finally threw exception:");
-		        log("AuricService", e1.toString());
-                        e1.printStackTrace();
+		        Slog.i(TAG, "onStartup finally block threw exception:"+e1.toString());
                     }
                 }
             }
@@ -202,7 +213,6 @@ public class AuricService extends IAuricService.Stub {
 
     private boolean sendEmulatedSDCardPath() {
         mContext.enforceCallingOrSelfPermission(AURICFS_ADMIN_PERM, "Need AURICFS_ADMIN permission");
-
         return mConnection.execute(SEND_EMULATED_SD_PATH, 0, 0, null, false, EXTERNAL_EMULATED_SDCARD_PATH_REAL);
     }
 
@@ -211,7 +221,7 @@ public class AuricService extends IAuricService.Stub {
     if configured, this should just read the public key from the keystore and send over the key
     */
     public byte[] getPublicKey() {
-        log("AuricService", "top of gpk");
+	Slog.i(TAG, "top of gpk"); 
 
         mContext.enforceCallingOrSelfPermission(AURICFS_ADMIN_PERM, "Need AURICFS_ADMIN permission");
 
@@ -220,28 +230,28 @@ public class AuricService extends IAuricService.Stub {
 
         PublicKey servicePublicKey;
         if (keyMgr == null) {
-            log("AuricService", "gpk generating fresh");
+            Slog.i(TAG, "gpk generating fresh");
             // if first time, generate fresh key pair
             keyMgr = new APIKeyMgr(mContext, alias);
             servicePublicKey = keyMgr.getPublicKey(true);
         } else {
             // otherwise, get existing public key
-            log("AuricService", "gpk getting existing");
+            Slog.i(TAG,"gpk getting existing");
             servicePublicKey = keyMgr.getPublicKey(false);
         }
 
         if (servicePublicKey == null) {
-            log("AuricService", "gpk returning null");
+            Slog.i(TAG, "gpk returning null");
             return null;
         }
 
-        log("AuricService", "gpk returning succesfully");
+        Slog.i(TAG, "gpk returning succesfully");
         return servicePublicKey.getEncoded();
     }
 
     // user must first call getPublicKey()
-    public boolean initializeCrypto(int m, int n, byte[] wrappedKey, boolean loggingEnabled) {
-        log("AuricService", "top of initialize");
+    public byte[] initializeCrypto(int m, int n, byte[] wrappedKey, boolean loggingEnabled) {
+        Slog.i(TAG, "top of initialize");
 
         mContext.enforceCallingOrSelfPermission(AURICFS_ADMIN_PERM, "Need AURICFS_ADMIN permission");
 
@@ -249,15 +259,13 @@ public class AuricService extends IAuricService.Stub {
 	SecretKey key = new SecretKeySpec(wrappedKey, 0, wrappedKey.length, "AES");
 
 	if (key == null) {
-	    Slog.i(TAG, "could not deserialize bytes into object");
-            log("AuricService", "initializeCrypto could not deserialize bytes into object");
-	    return false;
+            Slog.i(TAG,"initializeCrypto could not deserialize bytes into object");
+	    return null;
 	}
 
         if (!validateIDAConfig(m, n)) {
-            Slog.i(TAG, "Invalid M/N IDA values in initialize");
-            log("AuricService", "initializeCrypto Invalid M/N IDA values in initialize");
-            return false;
+            Slog.i(TAG,"initializeCrypto Invalid M/N IDA values in initialize");
+            return null;
         }
 
 	KeyWrapping wrapper = new KeyWrapping();
@@ -265,31 +273,27 @@ public class AuricService extends IAuricService.Stub {
 	byte[] fekek = wrapper.asymmetricUnwrapKey(key, keyMgr.getPrivateKey()).getEncoded();
 
         if (fekek == null || fekek.length < KEY_LENGTH) {
-		Slog.i(TAG, "invalid fekek");
-                log("AuricService", "initialize invalid fekek");
-		return false;
+                Slog.i(TAG,"initialize contained invalid fekek");
+		return null;
         }
 
 	boolean retVal = false;
 
-	Slog.i(TAG, "sending emulated sd card path from initialize");
-        log("AuricService", "initialize calling sendEmulatedSDCardPath");
+        Slog.i(TAG,"initialize calling sendEmulatedSDCardPath");
 	retVal = sendEmulatedSDCardPath();
 	
 	if (!retVal) {
-		Slog.i(TAG, "could not send emulated sd card path from initialize");
-		log("AuricService", "initialize sendEmulatedSDCardPath failed");
-		return retVal;
+		Slog.i(TAG,"initialize sendEmulatedSDCardPath failed");
+		return null;
 	}
 	
-	Slog.i(TAG, "sending INITIALIZE");
-        log("AuricService", "initialize sending INITIALIZE call, m:" + m + ",n:" + n + ",loggingEnabled:" + loggingEnabled);
+        Slog.i(TAG,"initialize sending INITIALIZE call, m:" + m + ",n:" + n + ",loggingEnabled:" + loggingEnabled);
 	retVal = mConnection.execute(INITIALIZE, m, n, fekek, loggingEnabled, null);
 	Arrays.fill(fekek, (byte) 0);	// DO NOT DELETE THIS LINE
 	Arrays.fill(wrappedKey, (byte) 0);
 
         if (retVal) {
-            log("AuricService", "initialize INITIALIZE successful");
+            Slog.i(TAG, "initialize successful");
             // Persist M/N configuration so that system can start itself up upon phone reboot or battery failure
             File configDir = new File(CONFIG_DIR_PATH);
             configDir.mkdir();
@@ -298,29 +302,26 @@ public class AuricService extends IAuricService.Stub {
             FileOutputStream fos = null;
             
             try {
-                log("AuricService", "initialize saving config properties");
+                Slog.i(TAG, "initialize saving config properties");
                 fos = new FileOutputStream(CONFIG_DIR_PATH + "/" + CONFIG_FILE_NAME);
                 configProperties.setProperty("m", ""+m);
                 configProperties.setProperty("n", ""+n);
 
                 if (loggingEnabled) {
                     configProperties.setProperty("loggingEnabled", "1");
-                    log("AuricService", "initialize saving logEnabled:1");
+                    Slog.i(TAG,"initialize saving logEnabled:1");
                 }
                 else {
                     configProperties.setProperty("loggingEnabled", "0");
-                    log("AuricService", "initialize saving logEnabled:0");
+                    Slog.i(TAG,"initialize saving logEnabled:0");
                 }
 
                 configProperties.store(fos, null);
-                log("AuricService", "initialize configproperties stored");
+                Slog.i(TAG,"initialize configproperties stored");
             }
             catch (Exception e) {
-                log("AuricService", "initialize could not persist config properties");
-                log("AuricService", "exception:" + e.toString());
-                Slog.i(TAG, "could not persist m and n - VERY BAD PROBLEM");
+                Slog.i(TAG, "initialize could not persist config properties:" + e.toString());
                 retVal = false;
-                e.printStackTrace();
                 // this is VERY BAD if we cannot persist configuration.
             }
             finally {
@@ -329,79 +330,75 @@ public class AuricService extends IAuricService.Stub {
                         fos.close();
                     }
                     catch (Exception e1) {
-                        log("AuricService", "persist config properties finally block exception:" + e1.toString());
-                        e1.printStackTrace();
+                        Slog.i(TAG, "persist config properties finally block exception:" + e1.toString());
                     }
                 }
             }
         }
 	else {
-		log("AuricService", "initialize INITIALZIE call failed");
-		Slog.i(TAG, "could not send initialize command to daemon");
+		Slog.i(TAG,"initialize call failed");
 	}
 
-	return retVal;
+	if (!retVal) {
+		return null;
+	}
+	return auricServiceBytes;
+
     }
 
     // This is mostly meant for the system to be able to reinitialize itself when the phone reboots or dies from battery outage
     public boolean reinitialize(int m, int n, boolean loggingEnabled) {
-	Slog.i(TAG, "top of reinitialize");
-        log("AuricService", "top of reinitialize");
+        Slog.i(TAG,"top of reinitialize");
 
         if (!validateIDAConfig(m, n)) {
-            log("AuricService", "reinitialize invalid M/N IDA values");
-            Slog.i(TAG, "Invalid M/N IDA values in reinitialize");
+            Slog.i(TAG,"reinitialize invalid M/N IDA values");
             return false;
         }
 
 	boolean retVal = false;
 
-	Slog.i(TAG, "sending emulated sd card path from reinitialize");
-        log("AuricService", "reinitialize sending emulated sd card path");
+        Slog.i(TAG,"reinitialize sending emulated sd card path");
 	retVal = sendEmulatedSDCardPath();
 	
 	if (!retVal) {
-                log("AuricService", "reinitialize could not send emulated sd card path");
-		Slog.i(TAG, "could not send emulated sd card path from reinitialize");
+                Slog.i(TAG,"reinitialize could not send emulated sd card path");
 		return retVal;
 	}
 
-        log("AuricService", "reinitialize calling REINITIALIZE");
+        Slog.i(TAG,"reinitialize calling REINITIALIZE");
         retVal = mConnection.execute(REINITIALIZE, m, n, null, loggingEnabled, null); // REINITIALIZE does not send down a key
 
 	if (!retVal) {
-                log("AuricService", "reinitialize REINITIALIZE failure");
-		Slog.i(TAG, "could not send reinitialize command to daemon");
+                Slog.i(TAG,"reinitialize REINITIALIZE failure");
 	}
 	else {
-		log("AuricService", "reinitialize REINITIALIZE success");
+		Slog.i(TAG,"reinitialize REINITIALIZE success");
 	}
 
 	return retVal;
     }
 
     // Deauthenticate the system. Simply send the call down to FUSE daemon, it will take care of the rest.
-    public boolean deauthenticate() {
-        log("AuricService", "top of deauthenticate");
+    public byte[] deauthenticate() {
+        Slog.i(TAG,"top of deauthenticate");
 
         mContext.enforceCallingOrSelfPermission(AURICFS_ADMIN_PERM, "Need AURICFS_ADMIN permission");
 
-	Slog.i(TAG, "sending deauthenticate");
+	Slog.i(TAG,"sending deauthenticate");
 	boolean retVal = mConnection.execute(DEAUTHENTICATE, 0, 0, null, false, null);	// only the first parameter for this command matters
         
-        if (retVal) {
-            log("AuricService", "deauthenticate success");
-        }
-        else {
-            log("AuricService", "deauthenticate failure");
+        if (!retVal) {
+            Slog.i(TAG, "deauthenticate failure");
+	    return null;
         }
 
-        return retVal;
+        Slog.i(TAG, "deauthenticate sucesss");
+        return auricServiceBytes;
     }
 
     // user must first call getPublicKey()
-    public boolean reauthenticate(byte[] wrappedKey) {
-        log("AuricService", "top of reauthenticate");
+    public byte[] reauthenticate(byte[] wrappedKey) {
+        Slog.i(TAG,"top of reauthenticate");
 
         mContext.enforceCallingOrSelfPermission(AURICFS_ADMIN_PERM, "Need AURICFS_ADMIN permission");
 
@@ -409,56 +406,97 @@ public class AuricService extends IAuricService.Stub {
 	SecretKey key = new SecretKeySpec(wrappedKey, 0, wrappedKey.length, "AES");
 
 	if (key == null) {
-                log("AuricService", "reauthenticate could not deserialize bytes into object");
-		Slog.i(TAG, "could not deserialize bytes into object");
-		return false;
+                Slog.i(TAG,"reauthenticate could not deserialize bytes into object");
+		return null;
 	}
 
 	KeyWrapping wrapper = new KeyWrapping();
 	byte[] fekek = wrapper.asymmetricUnwrapKey(key, keyMgr.getPrivateKey()).getEncoded();
 
         if ((fekek == null) || (fekek.length < KEY_LENGTH)) {
-		log("AuricService", "reauthenticate invalid fekek");
-		Slog.i(TAG, "invalid fekek");
-		return false;
+		Slog.i(TAG,"reauthenticate contained invalid fekek");
+		return null;
         }
 
-	Slog.i(TAG, "sending reauthenticate");
-        log("AuricService", "reauthenticate sending REAUTHENTICATE");
+        Slog.i(TAG,"sending REAUTHENTICATE");
 	boolean retVal = mConnection.execute(REAUTHENTICATE, 0, 0, fekek, false, null); // only first and fourth parameter for this command matter
 	Arrays.fill(fekek, (byte) 0);
 	Arrays.fill(wrappedKey, (byte) 0);
 
-        if (retVal) {
-            log("AuricService", "reauthenticate REAUTHENTICATE success");
-        }
-        else {
-            log("AuricService", "reauthenticate REAUTHENTICATE failed");
+        if (!retVal) {
+            Slog.i(TAG,"reauthenticate REAUTHENTICATE failed");
+	    return null;
         }
 
-	return retVal;
+        Slog.i(TAG,"reauthenticate REAUTHENTICATE failed");
+	return auricServiceBytes;
     }
 
-    public boolean sendEncryptedDirectory(String encryptedDir) {
-        log("AuricService", "top of sendEncryptedDirectory");
+    public boolean sendEncryptedDirectory(String encryptedDir, boolean persistDirConfig) {
+        Slog.i(TAG,"top of sendEncryptedDirectory");
 
         mContext.enforceCallingOrSelfPermission(AURICFS_ADMIN_PERM, "Need AURICFS_ADMIN permission");
 
 	if ((encryptedDir == null) || (encryptedDir.length() < 1)) {
-                log("AuricService", "sendEncryptedDirectory invalid parameter");
-		Slog.i(TAG, "sendEncryptedDirectory invalid parameter");
+                Slog.i(TAG,"sendEncryptedDirectory invalid parameter");
 		return false;
 	}
 
-	Slog.i(TAG, "sending SEND_ENCRYPTED_DIR");
-        log("AuricService", "sendEncryptedDirectory sending SEND_ENCRYPTED_DIR");
+        Slog.i(TAG,"sending SEND_ENCRYPTED_DIR");
 	boolean retVal = mConnection.execute(SEND_ENCRYPTED_DIR, 0, 0, null, false, encryptedDir); // only first and 6th parameter for this command matter
 
         if (retVal) {
-            log("AuricService", "sendEncryptedDirectory SEND_ENCRYPTED_DIR success");
+            Slog.i(TAG,"sendEncryptedDirectory SEND_ENCRYPTED_DIR success");
+	    if (persistDirConfig) {
+		    Slog.i(TAG, "persisting Dir Config...");
+	    	    // save so that we can reload this dir if the phone reboots
+		    File configDir = new File(CONFIG_DIR_PATH);
+		    
+		    Properties configProperties = new Properties();
+		    FileOutputStream fos = null;
+		    FileInputStream fis = null;
+		    
+		    try {
+		        fis = new FileInputStream(CONFIG_DIR_PATH + "/" + CONFIG_FILE_NAME);
+		        configProperties.load(fis);
+		        fos = new FileOutputStream(CONFIG_DIR_PATH + "/" + CONFIG_FILE_NAME);
+		        String mountedDirProperty = configProperties.getProperty("mountedDir", "");
+			if (mountedDirProperty.equals("")) {
+				mountedDirProperty = encryptedDir;
+			}
+			else {
+				mountedDirProperty += "," + encryptedDir;
+			}
+			Slog.i(TAG,"mountedDirProperty setting is:" + mountedDirProperty);
+
+		        configProperties.setProperty("mountedDir", mountedDirProperty);
+		        configProperties.store(fos, null);
+		    }
+		    catch (Exception e) {
+			Slog.i(TAG,"persistDirconfig exception:" + e.toString());
+		    }
+		    finally {
+		        if (fis != null) {
+		            try {
+		                fis.close();
+		            }
+		            catch (Exception e2) {
+		                Slog.i(TAG,"persistDirconfig finally block exception:" + e2.toString());
+		            }
+		        }
+		        if (fos != null) {
+		            try {
+		                fos.close();
+		            }
+		            catch (Exception e1) {
+		                Slog.i(TAG,"persistDirconfig finally block exception:" + e1.toString());
+		            }
+		        }
+		    }
+            }
         }
         else {
-            log("AuricService", "sendEncryptedDirectory SEND_ENCRYPTED_DIR failed");
+            Slog.i(TAG,"sendEncryptedDirectory SEND_ENCRYPTED_DIR failed");
         }
 
 	return retVal;
@@ -483,7 +521,12 @@ public class AuricService extends IAuricService.Stub {
             e.printStackTrace();
         }
     }
+    
+    public static void log(String message) {
+        Slog.i(TAG, message);
+    }
 
+    /*
     public static synchronized void log(String tag, String message) {
 
         if (logFile == null) {
@@ -510,6 +553,7 @@ public class AuricService extends IAuricService.Stub {
         }
 
     }
+    */
 
     private static void rotateLogFile() {
         purgeOldFiles();
