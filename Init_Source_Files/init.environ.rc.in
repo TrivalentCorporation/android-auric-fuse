@@ -9,8 +9,4 @@ on init
     export ASEC_MOUNTPOINT /mnt/asec
     export LOOP_MOUNTPOINT /mnt/obb
     export BOOTCLASSPATH %BOOTCLASSPATH%
-    
-    #Auric Modification
-    #export SYSTEMSERVERCLASSPATH %SYSTEMSERVERCLASSPATH%
-    export SYSTEMSERVERCLASSPATH %SYSTEMSERVERCLASSPATH%:/system/framework/bcprov-jdk15on-151.jar
-    # End Auric Modification
+    export SYSTEMSERVERCLASSPATH %SYSTEMSERVERCLASSPATH%:/system/framework/AuricUtils.jar:/system/framework/bcprov-jdk15on-151.jar

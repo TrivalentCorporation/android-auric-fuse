@@ -281,10 +281,10 @@ on post-fs-data
     mkdir /data/data 0771 system system
 
     # Auric modifications
-    mkdir /data/auricfs 0771 system system
-    mkdir /data/auricfs/root 0771 system system
-    mkdir /data/auricfs/shreds 0771 system system
-    mkdir /data/auricfs/logs 0771 system system
+    mkdir /data/fefiles 0771 system system
+    mkdir /data/fefiles/root 0771 system system
+    mkdir /data/fefiles/misc 0771 system system
+    mkdir /data/fefiles/logs 0771 system system
     # End Auric modifications
 
     mkdir /data/app-private 0771 system system
